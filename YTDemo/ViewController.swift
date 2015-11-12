@@ -85,7 +85,7 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
         var cell: UITableViewCell!
         
         if segDisplayedContent.selectedSegmentIndex == 0 {
-            cell = tableView.dequeueReusableCellWithIdentifier("idCellChannel", forIndexPath: indexPath) as! UITableViewCell
+            cell = tableView.dequeueReusableCellWithIdentifier("idCellChannel", forIndexPath: indexPath)
             
             let channelTitleLabel = cell.viewWithTag(10) as! UILabel
             let channelDescriptionLabel = cell.viewWithTag(11) as! UILabel
@@ -97,7 +97,7 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
             thumbnailImageView.image = UIImage(data: NSData(contentsOfURL: NSURL(string: (channelDetails["thumbnail"] as? String)!)!)!)
         }
         else {
-            cell = tableView.dequeueReusableCellWithIdentifier("idCellVideo", forIndexPath: indexPath) as! UITableViewCell
+            cell = tableView.dequeueReusableCellWithIdentifier("idCellVideo", forIndexPath: indexPath)
             
             let videoTitle = cell.viewWithTag(10) as! UILabel
             let videoThumbnail = cell.viewWithTag(11) as! UIImageView
@@ -142,29 +142,30 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
     
     // MARK: UITextFieldDelegate method implementation
     
-    func textFieldShouldReturn(textField: UITextField) -> Bool {
-        textField.resignFirstResponder()
-        viewWait.hidden = false
-        
-        // Specify the search type (channel, video).
-        var type = "channel"
-        if segDisplayedContent.selectedSegmentIndex == 1 {
-            type = "video"
-            videosArray.removeAll(keepCapacity: false)
-        }
-        
-        // Form the request URL string.
-        var urlString = "https://www.googleapis.com/youtube/v3/search?part=snippet&q=\(textField.text)&type=\(type)&key=\(apiKey)"
-        urlString = urlString.stringByAddingPercentEscapesUsingEncoding(NSUTF8StringEncoding)!
-        
-        // Create a NSURL object based on the above string.
-        let targetURL = NSURL(string: urlString)
-        
-        // Get the results.
-        performGetRequest(targetURL, completion: { (data, HTTPStatusCode, error) -> Void in
-            if HTTPStatusCode == 200 && error == nil {
-                // Convert the JSON data to a dictionary object.
-                let resultsDict = NSJSONSerialization.JSONObjectWithData(data!, options: nil, error: nil) as! Dictionary<NSObject, AnyObject>
+func textFieldShouldReturn(textField: UITextField) -> Bool {
+    textField.resignFirstResponder()
+    viewWait.hidden = false
+    
+    // Specify the search type (channel, video).
+    var type = "channel"
+    if segDisplayedContent.selectedSegmentIndex == 1 {
+        type = "video"
+        videosArray.removeAll(keepCapacity: false)
+    }
+    
+    // Form the request URL string.
+    var urlString = "https://www.googleapis.com/youtube/v3/search?part=snippet&q=\(textField.text)&type=\(type)&key=\(apiKey)"
+    urlString = urlString.stringByAddingPercentEncodingWithAllowedCharacters(NSCharacterSet.URLQueryAllowedCharacterSet())!
+    
+    // Create a NSURL object based on the above string.
+    let targetURL = NSURL(string: urlString)
+    
+    // Get the results.
+    performGetRequest(targetURL, completion: { (data, HTTPStatusCode, error) -> Void in
+        if HTTPStatusCode == 200 && error == nil {
+            // Convert the JSON data to a dictionary object.
+            do {
+                let resultsDict = try NSJSONSerialization.JSONObjectWithData(data!, options: []) as! Dictionary<NSObject, AnyObject>
                 
                 // Get all search result items ("items" array).
                 let items: Array<Dictionary<NSObject, AnyObject>> = resultsDict["items"] as! Array<Dictionary<NSObject, AnyObject>>
@@ -192,25 +193,28 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
                         self.tblVideos.reloadData()
                     }
                 }
-                
-                // Call the getChannelDetails(…) function to fetch the channels.
-                if self.segDisplayedContent.selectedSegmentIndex == 0 {
-                    self.getChannelDetails(true)
-                }
-                
-            }
-            else {
-                println("HTTP Status Code = \(HTTPStatusCode)")
-                println("Error while loading channel videos: \(error)")
+            } catch {
+                print(error)
             }
             
-            // Hide the activity indicator.
-            self.viewWait.hidden = true
-        })
+            // Call the getChannelDetails(…) function to fetch the channels.
+            if self.segDisplayedContent.selectedSegmentIndex == 0 {
+                self.getChannelDetails(true)
+            }
+            
+        }
+        else {
+            print("HTTP Status Code = \(HTTPStatusCode)")
+            print("Error while loading channel videos: \(error)")
+        }
         
-        
-        return true
-    }
+        // Hide the activity indicator.
+        self.viewWait.hidden = true
+    })
+    
+    
+    return true
+}
     
     
     // MARK: Custom method implementation
@@ -223,7 +227,7 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
         
         let session = NSURLSession(configuration: sessionConfiguration)
         
-        let task = session.dataTaskWithRequest(request, completionHandler: { (data: NSData!, response: NSURLResponse!, error: NSError!) -> Void in
+        let task = session.dataTaskWithRequest(request, completionHandler: { (data: NSData?, response: NSURLResponse?, error: NSError?) -> Void in
             dispatch_async(dispatch_get_main_queue(), { () -> Void in
                 completion(data: data, HTTPStatusCode: (response as! NSHTTPURLResponse).statusCode, error: error)
             })
@@ -246,45 +250,50 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
         
         performGetRequest(targetURL, completion: { (data, HTTPStatusCode, error) -> Void in
             if HTTPStatusCode == 200 && error == nil {
-                // Convert the JSON data to a dictionary.
-                let resultsDict = NSJSONSerialization.JSONObjectWithData(data!, options: nil, error: nil) as! Dictionary<NSObject, AnyObject>
                 
-                // Get the first dictionary item from the returned items (usually there's just one item).
-                let items: AnyObject! = resultsDict["items"] as AnyObject!
-                let firstItemDict = (items as! Array<AnyObject>)[0] as! Dictionary<NSObject, AnyObject>
-                
-                // Get the snippet dictionary that contains the desired data.
-                let snippetDict = firstItemDict["snippet"] as! Dictionary<NSObject, AnyObject>
-                
-                // Create a new dictionary to store only the values we care about.
-                var desiredValuesDict: Dictionary<NSObject, AnyObject> = Dictionary<NSObject, AnyObject>()
-                desiredValuesDict["title"] = snippetDict["title"]
-                desiredValuesDict["description"] = snippetDict["description"]
-                desiredValuesDict["thumbnail"] = ((snippetDict["thumbnails"] as! Dictionary<NSObject, AnyObject>)["default"] as! Dictionary<NSObject, AnyObject>)["url"]
-                
-                // Save the channel's uploaded videos playlist ID.
-                desiredValuesDict["playlistID"] = ((firstItemDict["contentDetails"] as! Dictionary<NSObject, AnyObject>)["relatedPlaylists"] as! Dictionary<NSObject, AnyObject>)["uploads"]
-                
-                
-                // Append the desiredValuesDict dictionary to the following array.
-                self.channelsDataArray.append(desiredValuesDict)
-                
-                
-                // Reload the tableview.
-                self.tblVideos.reloadData()
-                
-                // Load the next channel data (if exist).
-                ++self.channelIndex
-                if self.channelIndex < self.desiredChannelsArray.count {
-                    self.getChannelDetails(useChannelIDParam)
+                do {
+                    // Convert the JSON data to a dictionary.
+                    let resultsDict = try NSJSONSerialization.JSONObjectWithData(data!, options: []) as! Dictionary<NSObject, AnyObject>
+                    
+                    // Get the first dictionary item from the returned items (usually there's just one item).
+                    let items: AnyObject! = resultsDict["items"] as AnyObject!
+                    let firstItemDict = (items as! Array<AnyObject>)[0] as! Dictionary<NSObject, AnyObject>
+                    
+                    // Get the snippet dictionary that contains the desired data.
+                    let snippetDict = firstItemDict["snippet"] as! Dictionary<NSObject, AnyObject>
+                    
+                    // Create a new dictionary to store only the values we care about.
+                    var desiredValuesDict: Dictionary<NSObject, AnyObject> = Dictionary<NSObject, AnyObject>()
+                    desiredValuesDict["title"] = snippetDict["title"]
+                    desiredValuesDict["description"] = snippetDict["description"]
+                    desiredValuesDict["thumbnail"] = ((snippetDict["thumbnails"] as! Dictionary<NSObject, AnyObject>)["default"] as! Dictionary<NSObject, AnyObject>)["url"]
+                    
+                    // Save the channel's uploaded videos playlist ID.
+                    desiredValuesDict["playlistID"] = ((firstItemDict["contentDetails"] as! Dictionary<NSObject, AnyObject>)["relatedPlaylists"] as! Dictionary<NSObject, AnyObject>)["uploads"]
+                    
+                    
+                    // Append the desiredValuesDict dictionary to the following array.
+                    self.channelsDataArray.append(desiredValuesDict)
+                    
+                    
+                    // Reload the tableview.
+                    self.tblVideos.reloadData()
+                    
+                    // Load the next channel data (if exist).
+                    ++self.channelIndex
+                    if self.channelIndex < self.desiredChannelsArray.count {
+                        self.getChannelDetails(useChannelIDParam)
+                    }
+                    else {
+                        self.viewWait.hidden = true
+                    }
+                } catch {
+                    print(error)
                 }
-                else {
-                    self.viewWait.hidden = true
-                }
-            }
-            else {
-                println("HTTP Status Code = \(HTTPStatusCode)")
-                println("Error while loading channel details: \(error)")
+                
+            } else {
+                print("HTTP Status Code = \(HTTPStatusCode)")
+                print("Error while loading channel details: \(error)")
             }
         })
     }
@@ -303,33 +312,37 @@ class ViewController: UIViewController, UITableViewDelegate, UITableViewDataSour
         // Fetch the playlist from Google.
         performGetRequest(targetURL, completion: { (data, HTTPStatusCode, error) -> Void in
             if HTTPStatusCode == 200 && error == nil {
-                // Convert the JSON data into a dictionary.
-                let resultsDict = NSJSONSerialization.JSONObjectWithData(data!, options: nil, error: nil) as! Dictionary<NSObject, AnyObject>
-                
-                // Get all playlist items ("items" array).
-                let items: Array<Dictionary<NSObject, AnyObject>> = resultsDict["items"] as! Array<Dictionary<NSObject, AnyObject>>
-                
-                // Use a loop to go through all video items.
-                for var i=0; i<items.count; ++i {
-                    let playlistSnippetDict = (items[i] as Dictionary<NSObject, AnyObject>)["snippet"] as! Dictionary<NSObject, AnyObject>
+                do {
+                    // Convert the JSON data into a dictionary.
+                    let resultsDict = try NSJSONSerialization.JSONObjectWithData(data!, options: []) as! Dictionary<NSObject, AnyObject>
                     
-                    // Initialize a new dictionary and store the data of interest.
-                    var desiredPlaylistItemDataDict = Dictionary<NSObject, AnyObject>()
+                    // Get all playlist items ("items" array).
+                    let items: Array<Dictionary<NSObject, AnyObject>> = resultsDict["items"] as! Array<Dictionary<NSObject, AnyObject>>
                     
-                    desiredPlaylistItemDataDict["title"] = playlistSnippetDict["title"]
-                    desiredPlaylistItemDataDict["thumbnail"] = ((playlistSnippetDict["thumbnails"] as! Dictionary<NSObject, AnyObject>)["default"] as! Dictionary<NSObject, AnyObject>)["url"]
-                    desiredPlaylistItemDataDict["videoID"] = (playlistSnippetDict["resourceId"] as! Dictionary<NSObject, AnyObject>)["videoId"]
-                    
-                    // Append the desiredPlaylistItemDataDict dictionary to the videos array.
-                    self.videosArray.append(desiredPlaylistItemDataDict)
-                    
-                    // Reload the tableview.
-                    self.tblVideos.reloadData()
+                    // Use a loop to go through all video items.
+                    for var i=0; i<items.count; ++i {
+                        let playlistSnippetDict = (items[i] as Dictionary<NSObject, AnyObject>)["snippet"] as! Dictionary<NSObject, AnyObject>
+                        
+                        // Initialize a new dictionary and store the data of interest.
+                        var desiredPlaylistItemDataDict = Dictionary<NSObject, AnyObject>()
+                        
+                        desiredPlaylistItemDataDict["title"] = playlistSnippetDict["title"]
+                        desiredPlaylistItemDataDict["thumbnail"] = ((playlistSnippetDict["thumbnails"] as! Dictionary<NSObject, AnyObject>)["default"] as! Dictionary<NSObject, AnyObject>)["url"]
+                        desiredPlaylistItemDataDict["videoID"] = (playlistSnippetDict["resourceId"] as! Dictionary<NSObject, AnyObject>)["videoId"]
+                        
+                        // Append the desiredPlaylistItemDataDict dictionary to the videos array.
+                        self.videosArray.append(desiredPlaylistItemDataDict)
+                        
+                        // Reload the tableview.
+                        self.tblVideos.reloadData()
+                    }
+                } catch {
+                    print(error)
                 }
             }
             else {
-                println("HTTP Status Code = \(HTTPStatusCode)")
-                println("Error while loading channel videos: \(error)")
+                print("HTTP Status Code = \(HTTPStatusCode)")
+                print("Error while loading channel videos: \(error)")
             }
             
             // Hide the activity indicator.
